@@ -8,17 +8,31 @@
 ## 1. Création de la VM dans Proxmox
 
 ```bash
-qm create 102 \
+qm create 101 \
   --name frontend \
   --memory 4096 \
+  --balloon 0 \
   --cores 4 \
   --cpu host \
   --scsihw virtio-scsi-pci \
   --scsi0 G4-ZFS-POOL:30 \
-  --cdrom local:iso/debian-12-netinst.iso \
-  --net0 virtio,bridge=vmbr0 \
-  --ostype l26
+  --ide2 local:iso/debian-12.13.0-preseed.iso,media=cdrom \
+  --net0 virtio,bridge=OVSBridge,tag=20 \
+  --ostype l26 \
+  --machine q35 \
+  --bios ovmf \
+  --efidisk0 G4-ZFS-POOL:1,efitype=4m \
+  --vga std \
+  --serial0 socket \
+  --boot order="ide2;scsi0" \
+  --agent enabled=1
+
+# > --vga std : permet de suivre l'install via noVNC
+# > Supprimer après installation :
+# qm set 101 --vga none && qm set 101 --ide2 none
 ```
+
+> **Note** : utiliser un preseed adapté avec IP `192.168.20.161/24`
 
 ## 2. Installation Debian 12 + Docker
 

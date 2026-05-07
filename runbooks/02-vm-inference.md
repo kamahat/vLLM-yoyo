@@ -9,36 +9,54 @@
 ## 1. Création de la VM dans Proxmox
 
 ```bash
-# Récupérer le slot PCIe du GPU
-lspci -nn | grep 2f04
-# ex: 03:00.0 → slot = 0000:03:00.0
+# Slot PCIe GPU réel sur PVE2
+# 24:00.0 → GPU  (10de:2f04)
+# 24:00.1 → Audio (10de:2f80)
 
-# Créer la VM (adapter VMID et slot PCIe)
-qm create 101 \
+# Créer la VM
+qm create 100 \
   --name inference \
   --memory 32768 \
+  --balloon 0 \
   --cores 8 \
   --cpu host \
   --scsihw virtio-scsi-pci \
   --scsi0 G4-ZFS-POOL:100 \
-  --cdrom local:iso/debian-12-netinst.iso \
-  --net0 virtio,bridge=vmbr0 \
+  --ide2 local:iso/debian-12.13.0-preseed.iso,media=cdrom \
+  --net0 virtio,bridge=OVSBridge,tag=20 \
   --ostype l26 \
   --machine q35 \
   --bios ovmf \
-  --efidisk0 G4-ZFS-POOL:1 \
-  --hostpci0 0000:03:00.0,pcie=1,x-vga=0
+  --efidisk0 G4-ZFS-POOL:1,efitype=4m \
+  --hostpci0 0000:24:00.0,pcie=1,x-vga=0 \
+  --hostpci1 0000:24:00.1,pcie=1 \
+  --vga std \
+  --serial0 socket \
+  --boot order="ide2;scsi0" \
+  --agent enabled=1
 
-# Ajouter le device audio du GPU (même groupe IOMMU)
-qm set 101 --hostpci1 0000:03:00.1,pcie=1
+# > --vga std : permet de suivre l'install via noVNC (Proxmox console)
+# > Supprimer après installation : qm set 100 --vga none
 ```
 
-## 2. Installation Debian 12
+## 2. Installation Debian 12 (automatique via preseed)
 
-- Boot sur l'ISO Debian 12 Bookworm
-- Installation minimale (sans desktop, sans GUI)
-- Partitionnement : tout sur le disque principal
-- Paquets : SSH server uniquement
+L'ISO `debian-12.13.0-preseed.iso` contient le fichier preseed pré-configuré :
+- IP statique : `192.168.20.160/24`, GW `192.168.20.1`, DNS `192.168.20.20`
+- Paquets : `vim htop screen dnsutils curl wget git qemu-guest-agent`
+- Clés SSH injectées dans `/root/.ssh/authorized_keys`
+- `PermitRootLogin prohibit-password` activé
+
+Suivre la progression via **noVNC** dans Proxmox (`https://pve2.zalin.home:8006`).
+
+Après reboot :
+```bash
+# Supprimer la VGA temporaire
+qm set 100 --vga none
+
+# Détacher l'ISO
+qm set 100 --ide2 none
+```
 
 ## 3. Configuration post-installation
 
