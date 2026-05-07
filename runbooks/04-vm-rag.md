@@ -32,6 +32,9 @@ ssh root@pve2.zalin.home \
 
 ## 2. Création de la VM
 
+L'option `--args "-no-reboot"` convertit le reboot de fin d'installation en shutdown QEMU,
+permettant au script de monitoring de corriger le boot order avant de relancer la VM.
+
 ```bash
 ssh root@pve2.zalin.home '
 qm create 102 \
@@ -52,20 +55,30 @@ qm create 102 \
   --agent enabled=1 \
   --vga std \
   --serial0 socket \
-  --onboot 1
+  --onboot 1 \
+  --args "-no-reboot"
 qm start 102
 '
 ```
+
+> `--args "-no-reboot"` : converti le reboot guest en shutdown QEMU (retiré automatiquement par le script de monitoring).
 
 ## 3. Suivi installation + nettoyage automatique
 
 ```bash
 # Sur claude-code
-nohup bash /opt/vLLM-yoyo/scripts/wait-and-cleanup-vm.sh 102 192.168.20.162 \
-  > /var/log/vm-cleanup-102.log 2>&1 &
+nohup bash /opt/vLLM-yoyo/scripts/monitor-and-fix-vm.sh 102 192.168.20.162 \
+  > /var/log/vm-monitor-102.log 2>&1 &
 
-tail -f /var/log/vm-cleanup-102.log
+tail -f /var/log/vm-monitor-102.log
 ```
+
+Le script détecte que la VM passe en `stopped` (reboot converti en shutdown par `-no-reboot`), puis :
+- Détache l'ISO : `qm set 102 --ide2 none`
+- Fixe le boot : `qm set 102 --boot order=scsi0`
+- Supprime l'arg `-no-reboot` : `qm set 102 --delete args`
+- Relance la VM : `qm start 102`
+- Attend que SSH soit disponible sur `192.168.20.162`
 
 ## 4. Déploiement ChromaDB via Portainer
 
@@ -132,4 +145,21 @@ qm resize 102 scsi0 +50G
 pvresize /dev/sda3
 lvextend -l +100%FREE /dev/vg-rag/lv-chromadb
 resize2fs /dev/vg-rag/lv-chromadb
+```
+
+## Troubleshooting
+
+### VM bloquée en reinstall (boot sur ISO au lieu du disque)
+```bash
+# Vérifier l'état de la VM
+ssh root@pve2.zalin.home 'qm config 102 | grep -E "^boot|^ide2|^args"'
+
+# Corriger manuellement si le script n'a pas tourné
+ssh root@pve2.zalin.home '
+  qm stop 102
+  qm set 102 --ide2 none
+  qm set 102 --boot order=scsi0
+  qm set 102 --delete args 2>/dev/null || true
+  qm start 102
+'
 ```

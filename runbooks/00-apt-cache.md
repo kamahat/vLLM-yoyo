@@ -33,6 +33,9 @@ ssh root@pve2.zalin.home \
 
 ## 2. Création de la VM
 
+L'option `--args "-no-reboot"` convertit le reboot de fin d'installation en shutdown QEMU,
+permettant au script de monitoring de corriger le boot order avant de relancer la VM.
+
 ```bash
 ssh root@pve2.zalin.home '
 qm create 103 \
@@ -53,27 +56,32 @@ qm create 103 \
   --agent enabled=1 \
   --vga std \
   --serial0 socket \
-  --onboot 1
+  --onboot 1 \
+  --args "-no-reboot"
 qm start 103
 '
 ```
 
 > `--onboot 1` : la VM démarre automatiquement avec PVE2.
+> `--args "-no-reboot"` : converti le reboot guest en shutdown QEMU (retiré automatiquement par le script de monitoring).
 
 ## 3. Suivi installation + nettoyage automatique
 
 ```bash
 # Sur claude-code — lancer en background
-nohup bash /opt/vLLM-yoyo/scripts/wait-and-cleanup-vm.sh 103 192.168.20.163 \
-  > /var/log/vm-cleanup-103.log 2>&1 &
+nohup bash /opt/vLLM-yoyo/scripts/monitor-and-fix-vm.sh 103 192.168.20.163 \
+  > /var/log/vm-monitor-103.log 2>&1 &
 
 # Suivre les logs
-tail -f /var/log/vm-cleanup-103.log
+tail -f /var/log/vm-monitor-103.log
 ```
 
-Le script détecte le reboot sur Debian (SSH disponible), puis :
+Le script détecte que la VM passe en `stopped` (reboot converti en shutdown par `-no-reboot`), puis :
 - Détache l'ISO : `qm set 103 --ide2 none`
 - Fixe le boot : `qm set 103 --boot order=scsi0`
+- Supprime l'arg `-no-reboot` : `qm set 103 --delete args`
+- Relance la VM : `qm start 103`
+- Attend que SSH soit disponible sur `192.168.20.163`
 
 ## 4. Vérification
 
@@ -85,23 +93,16 @@ curl -v http://192.168.20.163:3142/
 curl http://192.168.20.163:3142/acng-report.html
 ```
 
-## 5. Stack Docker (déployée automatiquement par le preseed)
+## 5. Service apt-cacher-ng (installé nativement via preseed)
 
-Fichier `/opt/apt-cacher-ng/docker-compose.yml` sur la VM :
+apt-cacher-ng est installé directement via `pkgsel/include` dans le preseed (pas de Docker).
 
-```yaml
-services:
-  apt-cacher-ng:
-    image: sameersbn/apt-cacher-ng:latest
-    container_name: apt-cacher-ng
-    restart: always
-    ports:
-      - "3142:3142"
-    volumes:
-      - /var/cache/apt-cacher-ng:/var/cache/apt-cacher-ng
-```
-
-Le cache est persisté sur le LV dédié `lv-cache` monté sur `/var/cache/apt-cacher-ng`.
+| Paramètre | Valeur |
+|-----------|--------|
+| Service | `apt-cacher-ng` |
+| Port | 3142 |
+| Cache | `/var/cache/apt-cacher-ng` (sur `lv-cache`) |
+| Config | `/etc/apt-cacher-ng/acng.conf` |
 
 ## 6. Accès console série
 
@@ -117,14 +118,33 @@ ssh root@pve2.zalin.home 'qm terminal 103'
 
 ### Proxy non joignable depuis les VMs
 ```bash
-# Vérifier le container
-ssh root@192.168.20.163 'docker ps | grep apt-cacher'
+# Vérifier le service
+ssh root@192.168.20.163 'systemctl status apt-cacher-ng'
 
 # Relancer si nécessaire
-ssh root@192.168.20.163 'cd /opt/apt-cacher-ng && docker compose up -d'
+ssh root@192.168.20.163 'systemctl restart apt-cacher-ng'
+
+# Vérifier les logs
+ssh root@192.168.20.163 'journalctl -u apt-cacher-ng -n 50'
 ```
 
 ### Vider le cache
 ```bash
-ssh root@192.168.20.163 'docker exec apt-cacher-ng find /var/cache/apt-cacher-ng -name "*.bin" -delete'
+ssh root@192.168.20.163 'find /var/cache/apt-cacher-ng -name "*.bin" -delete'
+# Ou via le rapport web : http://192.168.20.163:3142/acng-report.html
+```
+
+### VM bloquée en reinstall (boot sur ISO au lieu du disque)
+```bash
+# Vérifier l'état de la VM
+ssh root@pve2.zalin.home 'qm config 103 | grep -E "^boot|^ide2|^args"'
+
+# Corriger manuellement si le script n'a pas tourné
+ssh root@pve2.zalin.home '
+  qm stop 103
+  qm set 103 --ide2 none
+  qm set 103 --boot order=scsi0
+  qm set 103 --delete args 2>/dev/null || true
+  qm start 103
+'
 ```

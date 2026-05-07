@@ -36,6 +36,9 @@ Le preseed configure automatiquement :
 
 ## 2. Création de la VM
 
+L'option `--args "-no-reboot"` convertit le reboot de fin d'installation en shutdown QEMU,
+permettant au script de monitoring de corriger le boot order avant de relancer la VM.
+
 ```bash
 ssh root@pve2.zalin.home '
 qm create 101 \
@@ -56,20 +59,30 @@ qm create 101 \
   --agent enabled=1 \
   --vga std \
   --serial0 socket \
-  --onboot 1
+  --onboot 1 \
+  --args "-no-reboot"
 qm start 101
 '
 ```
+
+> `--args "-no-reboot"` : converti le reboot guest en shutdown QEMU (retiré automatiquement par le script de monitoring).
 
 ## 3. Suivi installation + nettoyage automatique
 
 ```bash
 # Sur claude-code
-nohup bash /opt/vLLM-yoyo/scripts/wait-and-cleanup-vm.sh 101 192.168.20.161 \
-  > /var/log/vm-cleanup-101.log 2>&1 &
+nohup bash /opt/vLLM-yoyo/scripts/monitor-and-fix-vm.sh 101 192.168.20.161 \
+  > /var/log/vm-monitor-101.log 2>&1 &
 
-tail -f /var/log/vm-cleanup-101.log
+tail -f /var/log/vm-monitor-101.log
 ```
+
+Le script détecte que la VM passe en `stopped` (reboot converti en shutdown par `-no-reboot`), puis :
+- Détache l'ISO : `qm set 101 --ide2 none`
+- Fixe le boot : `qm set 101 --boot order=scsi0`
+- Supprime l'arg `-no-reboot` : `qm set 101 --delete args`
+- Relance la VM : `qm start 101`
+- Attend que SSH soit disponible sur `192.168.20.161`
 
 ## 4. Déploiement Open WebUI via Portainer
 
@@ -155,4 +168,21 @@ qm resize 101 scsi0 +20G
 pvresize /dev/sda3
 lvextend -l +100%FREE /dev/vg-frontend/lv-docker
 resize2fs /dev/vg-frontend/lv-docker
+```
+
+## Troubleshooting
+
+### VM bloquée en reinstall (boot sur ISO au lieu du disque)
+```bash
+# Vérifier l'état de la VM
+ssh root@pve2.zalin.home 'qm config 101 | grep -E "^boot|^ide2|^args"'
+
+# Corriger manuellement si le script n'a pas tourné
+ssh root@pve2.zalin.home '
+  qm stop 101
+  qm set 101 --ide2 none
+  qm set 101 --boot order=scsi0
+  qm set 101 --delete args 2>/dev/null || true
+  qm start 101
+'
 ```

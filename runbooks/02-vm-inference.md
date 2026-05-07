@@ -38,6 +38,9 @@ Le preseed configure automatiquement :
 
 ## 2. Création de la VM
 
+L'option `--args "-no-reboot"` convertit le reboot de fin d'installation en shutdown QEMU,
+permettant au script de monitoring de corriger le boot order avant de relancer la VM.
+
 ```bash
 ssh root@pve2.zalin.home '
 qm create 100 \
@@ -61,28 +64,32 @@ qm create 100 \
   --hostpci0 0000:24:00.0,pcie=1,x-vga=1 \
   --hostpci1 0000:24:00.1,pcie=1 \
   --numa 1 \
-  --onboot 0
+  --onboot 0 \
+  --args "-no-reboot"
 qm start 100
 '
 ```
 
-> `--vga std` : console graphique pendant installation (retirer après).  
+> `--vga std` : console graphique pendant installation (retirer après).
 > `--numa 1` : requis pour GPU passthrough stable.
+> `--args "-no-reboot"` : converti le reboot guest en shutdown QEMU (retiré automatiquement par le script de monitoring).
 
 ## 3. Suivi installation + nettoyage automatique
 
 ```bash
 # Sur claude-code
-nohup bash /opt/vLLM-yoyo/scripts/wait-and-cleanup-vm.sh 100 192.168.20.160 \
-  > /var/log/vm-cleanup-100.log 2>&1 &
+nohup bash /opt/vLLM-yoyo/scripts/monitor-and-fix-vm.sh 100 192.168.20.160 \
+  > /var/log/vm-monitor-100.log 2>&1 &
 
-tail -f /var/log/vm-cleanup-100.log
+tail -f /var/log/vm-monitor-100.log
 ```
 
-Après détection SSH, le script :
+Le script détecte que la VM passe en `stopped` (reboot converti en shutdown par `-no-reboot`), puis :
 - Détache l'ISO : `qm set 100 --ide2 none`
 - Fixe le boot : `qm set 100 --boot order=scsi0`
-- Vérifie `efibootmgr` sur la VM
+- Supprime l'arg `-no-reboot` : `qm set 100 --delete args`
+- Relance la VM : `qm start 100`
+- Attend que SSH soit disponible sur `192.168.20.160`
 
 ## 4. Accès console
 
@@ -244,4 +251,19 @@ nvidia-smi
 ```bash
 # Depuis PVE2, après installation terminée
 qm set 100 --vga none
+```
+
+### VM bloquée en reinstall (boot sur ISO au lieu du disque)
+```bash
+# Vérifier l'état de la VM
+ssh root@pve2.zalin.home 'qm config 100 | grep -E "^boot|^ide2|^args"'
+
+# Corriger manuellement si le script n'a pas tourné
+ssh root@pve2.zalin.home '
+  qm stop 100
+  qm set 100 --ide2 none
+  qm set 100 --boot order=scsi0
+  qm set 100 --delete args 2>/dev/null || true
+  qm start 100
+'
 ```
