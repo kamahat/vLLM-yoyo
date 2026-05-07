@@ -114,7 +114,8 @@ cat /etc/apt/apt.conf.d/01proxy
 apt update && apt upgrade -y
 
 # Paquets essentiels
-apt install -y build-essential python3-pip python3-venv pciutils nvtop net-tools \
+# Note: nvtop n'est pas disponible sur Debian 12 — nvidia-smi suffit après CUDA
+apt install -y build-essential python3-pip python3-venv pciutils net-tools \
   linux-headers-$(uname -r) dkms
 ```
 
