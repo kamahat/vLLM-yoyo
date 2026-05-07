@@ -30,7 +30,7 @@ ssh root@pve2.zalin.home \
 
 Le preseed configure automatiquement :
 - IP statique `192.168.20.160/24`, GW `.1`, DNS `.20`
-- Proxy APT → `http://192.168.20.163:3142/`
+- Proxy APT → `http://192.168.20.163:3142/` (pendant installation ET post-install via `/etc/apt/apt.conf.d/01proxy`)
 - LVM avec ≥15% de marge dans le VG
 - Clés SSH root injectées
 - Docker CE + Portainer agent (port 9001)
@@ -104,13 +104,18 @@ ssh root@192.168.20.160
 
 # Vérifier le GPU
 lspci | grep -i nvidia
-nvidia-smi   # doit afficher la RTX 5070
 
-# Mise à jour système
+# Configurer le proxy apt-cacher-ng (si absent — la VM déployée manuellement ne l'avait pas)
+echo 'Acquire::http::Proxy "http://192.168.20.163:3142/";' > /etc/apt/apt.conf.d/01proxy
+cat /etc/apt/apt.conf.d/01proxy
+# → doit afficher : Acquire::http::Proxy "http://192.168.20.163:3142/";
+
+# Mise à jour système (doit passer par le proxy)
 apt update && apt upgrade -y
 
 # Paquets essentiels
-apt install -y build-essential python3-pip python3-venv pciutils nvtop net-tools
+apt install -y build-essential python3-pip python3-venv pciutils nvtop net-tools \
+  linux-headers-$(uname -r) dkms
 ```
 
 ## 6. Installation drivers NVIDIA + CUDA 12.8
@@ -118,7 +123,7 @@ apt install -y build-essential python3-pip python3-venv pciutils nvtop net-tools
 > ⚠️ La RTX 5070 (architecture Blackwell) requiert les drivers **570+** et **CUDA 12.8 minimum**.
 > Utiliser impérativement le paquet `nvidia-open` (module kernel open-source), seul supporté sur cette génération.
 
-````bash
+```bash
 wget https://developer.download.nvidia.com/compute/cuda/repos/debian12/x86_64/cuda-keyring_1.1-1_all.deb
 dpkg -i cuda-keyring_1.1-1_all.deb
 apt update
@@ -126,8 +131,15 @@ apt install -y cuda-toolkit-12-8 nvidia-open
 
 echo 'export PATH=/usr/local/cuda/bin:$PATH' >> /etc/profile.d/cuda.sh
 echo 'export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH' >> /etc/profile.d/cuda.sh
+
 reboot
-````
+```
+
+```bash
+# Vérifier après reboot
+nvidia-smi
+nvcc --version
+```
 
 ## 7. Installation vLLM
 
@@ -225,13 +237,27 @@ resize2fs /dev/vg-inference/lv-models
 ```
 
 ## Troubleshooting
-````markdown
+
+### Proxy apt-cacher-ng absent ou mal configuré
+```bash
+# Vérifier
+cat /etc/apt/apt.conf.d/01proxy
+
+# Créer ou corriger
+echo 'Acquire::http::Proxy "http://192.168.20.163:3142/";' > /etc/apt/apt.conf.d/01proxy
+
+# Tester
+apt update
+```
+
 ### nvidia-smi introuvable
 ```bash
+# Vérifier que nvidia-open est bien installé
 dpkg -l | grep nvidia
+# Vérifier les modules chargés
 lsmod | grep nvidia
 ```
-````
+
 ### GPU non détecté
 ```bash
 lspci -nnk | grep -A3 "NVIDIA"
