@@ -67,7 +67,7 @@ Après installation, le script `wait-and-cleanup-vm.sh` détache l'ISO et fixe l
 - [x] Preseeds créés pour les 4 VMs (avec proxy APT, serial console, LVM avec marge)
 - [x] ISOs remastered sur PVE2
 - [x] Script wait-and-cleanup-vm.sh
-- [ ] VM apt-cache opérationnelle
+- [x] VM apt-cache opérationnelle
 - [ ] VM inference installée
 - [ ] CUDA + vLLM opérationnel
 - [ ] VM frontend déployée
