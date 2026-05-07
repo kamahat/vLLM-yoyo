@@ -113,19 +113,21 @@ apt update && apt upgrade -y
 apt install -y build-essential python3-pip python3-venv pciutils nvtop net-tools
 ```
 
-## 6. Installation CUDA 12.x
+## 6. Installation drivers NVIDIA + CUDA 12.8
 
-```bash
-# Ajouter le repo NVIDIA CUDA
+> ⚠️ La RTX 5070 (architecture Blackwell) requiert les drivers **570+** et **CUDA 12.8 minimum**.
+> Utiliser impérativement le paquet `nvidia-open` (module kernel open-source), seul supporté sur cette génération.
+
+````bash
 wget https://developer.download.nvidia.com/compute/cuda/repos/debian12/x86_64/cuda-keyring_1.1-1_all.deb
 dpkg -i cuda-keyring_1.1-1_all.deb
 apt update
-apt install -y cuda-toolkit-12-6
+apt install -y cuda-toolkit-12-8 nvidia-open
 
-# Vérifier
-nvidia-smi
-nvcc --version
-```
+echo 'export PATH=/usr/local/cuda/bin:$PATH' >> /etc/profile.d/cuda.sh
+echo 'export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH' >> /etc/profile.d/cuda.sh
+reboot
+````
 
 ## 7. Installation vLLM
 
@@ -223,7 +225,13 @@ resize2fs /dev/vg-inference/lv-models
 ```
 
 ## Troubleshooting
-
+````markdown
+### nvidia-smi introuvable
+```bash
+dpkg -l | grep nvidia
+lsmod | grep nvidia
+```
+````
 ### GPU non détecté
 ```bash
 lspci -nnk | grep -A3 "NVIDIA"
