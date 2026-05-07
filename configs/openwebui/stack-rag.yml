@@ -1,0 +1,60 @@
+# Portainer Stack — VM-3 rag
+# ChromaDB + pipeline RAG (LlamaIndex)
+# Connecté à vLLM inference sur 192.168.20.160:8000
+#
+# Déployer via Portainer : https://192.168.20.91:9443
+#   → Stacks → Add Stack → coller ce fichier
+
+services:
+
+  chromadb:
+    image: chromadb/chroma:latest
+    container_name: chromadb
+    restart: unless-stopped
+    ports:
+      - "8001:8000"
+    volumes:
+      - /opt/chromadb/data:/chroma/chroma
+    environment:
+      - CHROMA_SERVER_AUTH_CREDENTIALS_PROVIDER=chromadb.auth.token.TokenConfigServerAuthCredentialsProvider
+      - CHROMA_SERVER_AUTH_PROVIDER=chromadb.auth.token.TokenAuthServerProvider
+      - CHROMA_AUTH_TOKEN_TRANSPORT_HEADER=AUTHORIZATION
+      - CHROMA_SERVER_AUTH_CREDENTIALS=changeme-token
+      - IS_PERSISTENT=TRUE
+      - PERSIST_DIRECTORY=/chroma/chroma
+      - ANONYMIZED_TELEMETRY=false
+    networks:
+      - rag-net
+
+  rag-api:
+    image: python:3.11-slim
+    container_name: rag-api
+    restart: unless-stopped
+    ports:
+      - "8002:8002"
+    volumes:
+      - /opt/models:/opt/models:ro
+      - /opt/chromadb/ingestion:/app
+    working_dir: /app
+    environment:
+      # vLLM endpoint (VM-1)
+      - VLLM_BASE_URL=http://192.168.20.160:8000/v1
+      - VLLM_MODEL=deepseek-coder
+      # ChromaDB
+      - CHROMA_HOST=chromadb
+      - CHROMA_PORT=8000
+      - CHROMA_TOKEN=changeme-token
+    command: >
+      sh -c "pip install -q llama-index llama-index-vector-stores-chroma
+             llama-index-llms-openai-like chromadb fastapi uvicorn &&
+             uvicorn main:app --host 0.0.0.0 --port 8002"
+    depends_on:
+      - chromadb
+    networks:
+      - rag-net
+
+volumes: {}
+
+networks:
+  rag-net:
+    driver: bridge

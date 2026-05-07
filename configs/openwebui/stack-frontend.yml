@@ -1,0 +1,57 @@
+# Portainer Stack — VM-2 frontend
+# Open WebUI + Nginx reverse proxy
+# Connecté à vLLM inference sur 192.168.20.160:8000
+#
+# Déployer via Portainer : https://192.168.20.91:9443
+#   → Stacks → Add Stack → coller ce fichier
+
+services:
+
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: open-webui
+    restart: unless-stopped
+    expose:
+      - "8080"
+    volumes:
+      - open-webui-data:/app/backend/data
+    environment:
+      # Endpoint vLLM (VM-1 inference)
+      - OPENAI_API_BASE_URL=http://192.168.20.160:8000/v1
+      - OPENAI_API_KEY=not-required
+      # Auth obligatoire
+      - WEBUI_AUTH=true
+      - WEBUI_NAME=vLLM-yoyo
+      # Désactiver la télémétrie
+      - SCARF_NO_ANALYTICS=true
+      - DO_NOT_TRACK=true
+      - ANONYMIZED_TELEMETRY=false
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - frontend-net
+
+  nginx:
+    image: nginx:alpine
+    container_name: nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - nginx-certs:/etc/nginx/certs
+    depends_on:
+      - open-webui
+    networks:
+      - frontend-net
+
+volumes:
+  open-webui-data:
+    driver: local
+  nginx-certs:
+    driver: local
+
+networks:
+  frontend-net:
+    driver: bridge
