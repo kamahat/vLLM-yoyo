@@ -4,8 +4,8 @@
 # Piloter depuis claude-code : bash portainer-register-envs.sh
 set -e
 
-PORTAINER_URL="https://192.168.20.91:9443"
-API_KEY="ptr_6Y7M3bb4/3KSuvFaHh0bV4P5avhSrbjVJ0LB/2t6C/M="
+PORTAINER_URL="${PORTAINER_URL:-https://192.168.20.91:9443}"
+API_KEY="${PORTAINER_TOKEN:?Variable PORTAINER_TOKEN non definie}"
 
 declare -A VMS
 VMS["inference"]="192.168.20.160"
