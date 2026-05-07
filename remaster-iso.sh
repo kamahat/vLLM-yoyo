@@ -1,7 +1,26 @@
 #!/bin/bash
+# remaster-iso.sh — Génère une ISO Debian 12 avec preseed embarqué
+# Usage: ./remaster-iso.sh <preseed.cfg> <output-name>
+# Exemple: ./remaster-iso.sh configs/preseed-inference.cfg debian-12-inference.iso
 set -e
+
 ISO_SRC=/var/lib/vz/template/iso/debian-12.13.0-netinst.iso
-ISO_DST=/var/lib/vz/template/iso/debian-12.13.0-preseed.iso
+PRESEED_FILE="${1:-/tmp/preseed.cfg}"
+OUTPUT_NAME="${2:-debian-12-preseed.iso}"
+ISO_DST="/var/lib/vz/template/iso/${OUTPUT_NAME}"
+
+if [ ! -f "$PRESEED_FILE" ]; then
+  echo "ERREUR: preseed introuvable: $PRESEED_FILE"
+  exit 1
+fi
+
+if [ ! -f "$ISO_SRC" ]; then
+  echo "ERREUR: ISO source introuvable: $ISO_SRC"
+  exit 1
+fi
+
+echo "=== Preseed: $PRESEED_FILE ==="
+echo "=== ISO destination: $ISO_DST ==="
 
 echo "=== grub-preseed.cfg ==="
 cat > /tmp/grub-preseed.cfg << 'GRUBEOF'
@@ -33,10 +52,10 @@ TXTEOF
 echo "=== Clone ISO avec preseed ==="
 xorriso -indev "$ISO_SRC" \
   -outdev "$ISO_DST" \
-  -map /tmp/preseed.cfg /preseed.cfg \
+  -map "$PRESEED_FILE" /preseed.cfg \
   -map /tmp/grub-preseed.cfg /boot/grub/grub.cfg \
   -map /tmp/txt-preseed.cfg /isolinux/txt.cfg \
-  -boot_image any replay 2>&1 | tail -8
+  -boot_image any replay 2>&1 | tail -5
 
 ls -lh "$ISO_DST"
-echo "=== ISO preseed prete ==="
+echo "=== ISO prete : $ISO_DST ==="

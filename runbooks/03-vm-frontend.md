@@ -15,7 +15,7 @@ qm create 101 \
   --cores 4 \
   --cpu host \
   --scsihw virtio-scsi-pci \
-  --scsi0 G4-ZFS-POOL:30 \
+  --scsi0 G4-ZFS-POOL:40 \
   --ide2 local:iso/debian-12.13.0-preseed.iso,media=cdrom \
   --net0 virtio,bridge=OVSBridge,tag=20 \
   --ostype l26 \
@@ -32,7 +32,15 @@ qm create 101 \
 # qm set 101 --vga none && qm set 101 --ide2 none
 ```
 
-> **Note** : utiliser un preseed adapté avec IP `192.168.20.161/24`
+> **Note** : utiliser un preseed adapté avec IP `192.168.20.161/24` et partitionnement LVM.
+
+### Agrandir le disque ultérieurement (LVM)
+```bash
+# Depuis PVE2
+qm resize 101 scsi0 +20G
+# Dans la VM
+pvresize /dev/sda3 && lvextend -l +100%FREE /dev/debian-vg/root && resize2fs /dev/debian-vg/root
+```
 
 ## 2. Installation Debian 12 + Docker
 

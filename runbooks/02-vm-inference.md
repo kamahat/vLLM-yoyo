@@ -21,7 +21,7 @@ qm create 100 \
   --cores 8 \
   --cpu host \
   --scsihw virtio-scsi-pci \
-  --scsi0 G4-ZFS-POOL:100 \
+  --scsi0 G4-ZFS-POOL:120 \
   --ide2 local:iso/debian-12.13.0-preseed.iso,media=cdrom \
   --net0 virtio,bridge=OVSBridge,tag=20 \
   --ostype l26 \
@@ -43,6 +43,7 @@ qm create 100 \
 
 L'ISO `debian-12.13.0-preseed.iso` contient le fichier preseed pré-configuré :
 - IP statique : `192.168.20.160/24`, GW `192.168.20.1`, DNS `192.168.20.20`
+- Partitionnement : **LVM** sur `/dev/sda` (extensible sans réinstall)
 - Paquets : `vim htop screen dnsutils curl wget git qemu-guest-agent`
 - Clés SSH injectées dans `/root/.ssh/authorized_keys`
 - `PermitRootLogin prohibit-password` activé
@@ -56,6 +57,17 @@ qm set 100 --vga none
 
 # Détacher l'ISO
 qm set 100 --ide2 none
+```
+
+### Agrandir le disque ultérieurement (LVM)
+```bash
+# 1. Depuis PVE2 — agrandir le disque virtuel
+qm resize 100 scsi0 +50G
+
+# 2. Dans la VM — étendre la partition LVM
+pvresize /dev/sda3
+lvextend -l +100%FREE /dev/debian-vg/root
+resize2fs /dev/debian-vg/root
 ```
 
 ## 3. Configuration post-installation
