@@ -10,6 +10,10 @@ d-i mirror/http/proxy string http://192.168.20.163:3142/
 ```
 Les paquets Debian sont téléchargés une seule fois et mis en cache localement.
 
+> ⚠️ **HTTPS** : Par défaut apt-cacher-ng bloque les tunnels HTTPS (`CONNECT`). Il faut activer
+> `PassThroughPattern: .*` dans la config pour permettre aux VMs d'accéder aux repos HTTPS
+> (ex: repo NVIDIA CUDA). Voir étape 5.
+
 ## Spécifications
 
 | Paramètre | Valeur |
@@ -104,6 +108,26 @@ apt-cacher-ng est installé directement via `pkgsel/include` dans le preseed (pa
 | Cache | `/var/cache/apt-cacher-ng` (sur `lv-cache`) |
 | Config | `/etc/apt-cacher-ng/acng.conf` |
 
+### Autoriser les tunnels HTTPS (PassThroughPattern)
+
+Par défaut apt-cacher-ng refuse les tunnels HTTPS, ce qui bloque les repos comme NVIDIA CUDA.
+À configurer après le premier démarrage de la VM :
+
+```bash
+ssh root@192.168.20.163
+
+echo 'PassThroughPattern: .*' >> /etc/apt-cacher-ng/acng.conf
+systemctl restart apt-cacher-ng
+systemctl status apt-cacher-ng
+
+# Vérifier
+grep PassThrough /etc/apt-cacher-ng/acng.conf
+```
+
+> Cette configuration autorise le CONNECT vers tous les hôtes HTTPS.
+> Pour restreindre uniquement au repo NVIDIA :
+> `PassThroughPattern: developer\.download\.nvidia\.com:443$`
+
 ## 6. Accès console série
 
 ```bash
@@ -126,6 +150,18 @@ ssh root@192.168.20.163 'systemctl restart apt-cacher-ng'
 
 # Vérifier les logs
 ssh root@192.168.20.163 'journalctl -u apt-cacher-ng -n 50'
+```
+
+### Repo HTTPS bloqué (erreur 403 CONNECT denied)
+```bash
+# Symptôme sur la VM cliente :
+# W: Impossible de récupérer https://... Invalid response from proxy: HTTP/1.0 403 CONNECT denied
+
+# Sur la VM apt-cache :
+grep PassThrough /etc/apt-cacher-ng/acng.conf
+# Si absent ou commenté :
+echo 'PassThroughPattern: .*' >> /etc/apt-cacher-ng/acng.conf
+systemctl restart apt-cacher-ng
 ```
 
 ### Vider le cache
