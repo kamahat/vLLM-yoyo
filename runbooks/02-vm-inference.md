@@ -2,6 +2,8 @@
 
 > **Statut : ✅ Opérationnelle** — vLLM 0.20.1 actif sur http://192.168.20.160:8000
 
+> ⚠️ **Blackwell (compute 12.0 / RTX 5070)** : FP8 dynamique produit des sorties incorrectes sur cette architecture. Solution : modèle **AWQ pré-quantifié** (INT4), stable et performant.
+
 ## Spécifications réelles
 
 | Paramètre | Valeur |
@@ -10,12 +12,12 @@
 | IP | 192.168.20.160 |
 | RAM | 48 Go |
 | CPU | 8 cores (host) |
-| GPU | RTX 5070 — 12 Go VRAM — driver 595.71.05 |
+| GPU | RTX 5070 — 12 Go VRAM — driver 595.71.05 — compute 12.0 (Blackwell) |
 | OS | Debian 12.x |
 | CUDA | 12.9 |
 | PyTorch | 2.11.0+cu130 |
 | vLLM | 0.20.1 |
-| Modèle actif | Qwen2.5-Coder-7B (FP8) |
+| Modèle actif | Qwen2.5-Coder-7B-Instruct-AWQ (INT4) |
 
 ## Layout disque (LVM vg-inference)
 
@@ -31,8 +33,10 @@
 
 | Modèle | Taille | Status |
 |--------|--------|--------|
-| Qwen2.5-Coder-7B | 15 Go | ✅ actif (FP8, 8.13 GiB VRAM) |
-| DeepSeek-Coder-V2-Lite | 30 Go | ⚠️ trop grand pour 12 Go VRAM seul |
+| Qwen2.5-Coder-7B-Instruct-AWQ | 5.2 Go | ✅ actif (AWQ INT4, ~4 GiB VRAM) |
+| Qwen2.5-Coder-7B (BF16) | 15 Go | ❌ 14 GiB requis > 12 GiB VRAM |
+| Qwen2.5-Coder-7B (FP8) | 15 Go | ❌ garbage output sur Blackwell compute 12.0 |
+| DeepSeek-Coder-V2-Lite | 30 Go | ❌ trop grand pour 12 Go VRAM |
 
 ## Service vLLM
 
@@ -53,8 +57,9 @@ systemctl restart vllm-qwen
 
 ```ini
 [Unit]
-Description=vLLM OpenAI-compatible API — Qwen2.5-Coder-7B
+Description=vLLM OpenAI-compatible API - Qwen2.5-Coder-7B-Instruct-AWQ
 After=network.target
+Wants=network.target
 
 [Service]
 Type=simple
@@ -63,12 +68,12 @@ WorkingDirectory=/opt/vllm-env
 Environment="CUDA_VISIBLE_DEVICES=0"
 Environment="HF_HUB_OFFLINE=1"
 Environment="VLLM_WORKER_MULTIPROC_METHOD=spawn"
-ExecStart=/opt/vllm-env/bin/vllm serve /opt/models/qwen2.5-coder-7b \
+ExecStart=/opt/vllm-env/bin/vllm serve /opt/models/qwen2.5-coder-7b-awq \
     --host 0.0.0.0 \
     --port 8000 \
     --served-model-name qwen2.5-coder-7b \
-    --dtype bfloat16 \
-    --quantization fp8 \
+    --quantization awq \
+    --dtype float16 \
     --gpu-memory-utilization 0.90 \
     --max-model-len 8192 \
     --max-num-seqs 32 \
@@ -76,6 +81,9 @@ ExecStart=/opt/vllm-env/bin/vllm serve /opt/models/qwen2.5-coder-7b \
 Restart=on-failure
 RestartSec=30
 TimeoutStartSec=300
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=vllm-qwen
 
 [Install]
 WantedBy=multi-user.target
@@ -83,12 +91,10 @@ WantedBy=multi-user.target
 
 ### Paramètres de chargement
 
-- **Quantization** : FP8 on-the-fly (CutlassFP8ScaledMMLinearKernel)
+- **Quantization** : AWQ INT4 pré-calibré (stable sur Blackwell compute 12.0)
 - **Attention** : FlashAttention v2
 - **Compilation** : torch.compile (inductor) + CUDA graphs
-- **KV cache** : 18 112 tokens disponibles
-- **Concurrence max** : 2.21x pour 8192 tokens/requête
-- **Temps de démarrage** : ~3 min (dont 45s torch.compile, mis en cache après)
+- **Temps de démarrage** : ~2-3 min (compile mis en cache après le 1er démarrage)
 
 ## API OpenAI-compatible
 

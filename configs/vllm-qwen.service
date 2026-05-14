@@ -1,27 +1,25 @@
 [Unit]
-Description=vLLM OpenAI-compatible API — Qwen2.5-Coder-7B
+Description=vLLM OpenAI-compatible API - Qwen2.5-Coder-7B-Instruct-AWQ
 After=network.target
+Wants=network.target
 
 [Service]
 Type=simple
 User=root
 WorkingDirectory=/opt/vllm-env
-Environment="CUDA_VISIBLE_DEVICES=0"
-Environment="HF_HUB_OFFLINE=1"
-Environment="VLLM_WORKER_MULTIPROC_METHOD=spawn"
-ExecStart=/opt/vllm-env/bin/vllm serve /opt/models/qwen2.5-coder-7b \
-    --host 0.0.0.0 \
-    --port 8000 \
-    --served-model-name qwen2.5-coder-7b \
-    --dtype bfloat16 \
-    --quantization fp8 \
-    --gpu-memory-utilization 0.90 \
-    --max-model-len 8192 \
-    --max-num-seqs 32 \
-    --trust-remote-code
+Environment=CUDA_VISIBLE_DEVICES=0
+Environment=HF_HUB_OFFLINE=1
+Environment=VLLM_WORKER_MULTIPROC_METHOD=spawn
+ExecStart=/opt/vllm-env/bin/vllm serve /opt/models/qwen2.5-coder-7b-awq     --host 0.0.0.0     --port 8000     --served-model-name qwen2.5-coder-7b     --quantization awq     --dtype float16     --gpu-memory-utilization 0.90     --max-model-len 8192     --max-num-seqs 32     --trust-remote-code
 Restart=on-failure
 RestartSec=30
 TimeoutStartSec=300
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=vllm-qwen
 
 [Install]
 WantedBy=multi-user.target
+
+# NOTE Blackwell compute 12.0 (RTX 5070):
+# FP8 dynamic = garbage output. Solution: AWQ pre-quantifie INT4.
