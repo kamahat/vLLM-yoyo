@@ -1,0 +1,27 @@
+[Unit]
+Description=vLLM OpenAI-compatible API — Qwen2.5-Coder-7B
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/vllm-env
+Environment="CUDA_VISIBLE_DEVICES=0"
+Environment="HF_HUB_OFFLINE=1"
+Environment="VLLM_WORKER_MULTIPROC_METHOD=spawn"
+ExecStart=/opt/vllm-env/bin/vllm serve /opt/models/qwen2.5-coder-7b \
+    --host 0.0.0.0 \
+    --port 8000 \
+    --served-model-name qwen2.5-coder-7b \
+    --dtype bfloat16 \
+    --quantization fp8 \
+    --gpu-memory-utilization 0.90 \
+    --max-model-len 8192 \
+    --max-num-seqs 32 \
+    --trust-remote-code
+Restart=on-failure
+RestartSec=30
+TimeoutStartSec=300
+
+[Install]
+WantedBy=multi-user.target

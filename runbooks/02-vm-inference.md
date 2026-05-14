@@ -1,53 +1,160 @@
-# Runbook 02 — VM-1 : Inference (vLLM + DeepSeek)
+# Runbook 02 — VM-1 : Inference (vLLM + Qwen2.5-Coder-7B)
 
-## Prérequis
+> **Statut : ✅ Opérationnelle** — vLLM 0.20.1 actif sur http://192.168.20.160:8000
 
-- VM apt-cache (103) opérationnelle sur `192.168.20.163:3142`
-- Proxmox VE 8.x avec VFIO configuré (runbook 01 ✓)
-- Pool ZFS `G4-ZFS-POOL` disponible
-
-## Spécifications
+## Spécifications réelles
 
 | Paramètre | Valeur |
 |-----------|--------|
 | VMID | 100 |
 | IP | 192.168.20.160 |
-| Disque | 150 Go (G4-ZFS-POOL) |
-| RAM | 16 Go |
+| RAM | 48 Go |
 | CPU | 8 cores (host) |
-| GPU | RTX 5070 — slot `24:00.0` (IDs `10de:2f04` + `10de:2f80`) |
-| LVM | vg-inference : lv-root 20 Go / lv-models 80 Go / lv-app 15 Go / lv-swap 4 Go (~29,5 Go libre = 20%) |
+| GPU | RTX 5070 — 12 Go VRAM — driver 595.71.05 |
+| OS | Debian 12.x |
+| CUDA | 12.9 |
+| PyTorch | 2.11.0+cu130 |
+| vLLM | 0.20.1 |
+| Modèle actif | Qwen2.5-Coder-7B (FP8) |
 
-## 1. Génération de l'ISO
+## Layout disque (LVM vg-inference)
+
+| LV | Taille | Point de montage |
+|----|--------|-----------------|
+| lv-root | 29 Go | `/` |
+| lv-app | 34 Go | `/opt/vllm-env` (venv Python) |
+| lv-models | 76 Go | `/opt/models` |
+| lv-swap | 3,8 Go | swap |
+| **VG libre** | ~5 Go | — |
+
+## Modèles disponibles
+
+| Modèle | Taille | Status |
+|--------|--------|--------|
+| Qwen2.5-Coder-7B | 15 Go | ✅ actif (FP8, 8.13 GiB VRAM) |
+| DeepSeek-Coder-V2-Lite | 30 Go | ⚠️ trop grand pour 12 Go VRAM seul |
+
+## Service vLLM
+
+Le service systemd `vllm-qwen` est configuré pour démarrer automatiquement.
 
 ```bash
-# Sur claude-code
-scp /opt/vLLM-yoyo/configs/preseed-inference.cfg root@pve2.zalin.home:/tmp/
+# Statut
+systemctl status vllm-qwen
 
-ssh root@pve2.zalin.home \
-  'bash /tmp/remaster-iso.sh /tmp/preseed-inference.cfg debian-12-inference.iso'
+# Logs
+journalctl -u vllm-qwen -f
+
+# Restart
+systemctl restart vllm-qwen
 ```
 
-Le preseed configure automatiquement :
-- IP statique `192.168.20.160/24`, GW `.1`, DNS `.20`
-- Proxy APT → `http://192.168.20.163:3142/`
-- LVM avec ≥15% de marge dans le VG
-- Clés SSH root injectées
-- Docker CE + Portainer agent (port 9001)
-- GRUB console série (`ttyS0,115200n8`)
+### Configuration du service (`/etc/systemd/system/vllm-qwen.service`)
 
-## 2. Création de la VM
+```ini
+[Unit]
+Description=vLLM OpenAI-compatible API — Qwen2.5-Coder-7B
+After=network.target
 
-L'option `--args "-no-reboot"` convertit le reboot de fin d'installation en shutdown QEMU,
-permettant au script de monitoring de corriger le boot order avant de relancer la VM.
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/vllm-env
+Environment="CUDA_VISIBLE_DEVICES=0"
+Environment="HF_HUB_OFFLINE=1"
+Environment="VLLM_WORKER_MULTIPROC_METHOD=spawn"
+ExecStart=/opt/vllm-env/bin/vllm serve /opt/models/qwen2.5-coder-7b \
+    --host 0.0.0.0 \
+    --port 8000 \
+    --served-model-name qwen2.5-coder-7b \
+    --dtype bfloat16 \
+    --quantization fp8 \
+    --gpu-memory-utilization 0.90 \
+    --max-model-len 8192 \
+    --max-num-seqs 32 \
+    --trust-remote-code
+Restart=on-failure
+RestartSec=30
+TimeoutStartSec=300
+
+[Install]
+WantedBy=multi-user.target
+```
+
+### Paramètres de chargement
+
+- **Quantization** : FP8 on-the-fly (CutlassFP8ScaledMMLinearKernel)
+- **Attention** : FlashAttention v2
+- **Compilation** : torch.compile (inductor) + CUDA graphs
+- **KV cache** : 18 112 tokens disponibles
+- **Concurrence max** : 2.21x pour 8192 tokens/requête
+- **Temps de démarrage** : ~3 min (dont 45s torch.compile, mis en cache après)
+
+## API OpenAI-compatible
+
+### Endpoints disponibles
+
+```
+GET  http://192.168.20.160:8000/health
+GET  http://192.168.20.160:8000/v1/models
+POST http://192.168.20.160:8000/v1/chat/completions
+POST http://192.168.20.160:8000/v1/completions
+GET  http://192.168.20.160:8000/metrics
+```
+
+### Tests rapides
+
+```bash
+# Santé
+curl http://192.168.20.160:8000/health
+
+# Modèles
+curl http://192.168.20.160:8000/v1/models
+
+# Inférence
+curl http://192.168.20.160:8000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "qwen2.5-coder-7b",
+    "messages": [{"role": "user", "content": "Ecris un hello world en Python"}],
+    "max_tokens": 200
+  }'
+```
+
+## Hookscript Proxmox
+
+Le hookscript `post-provision.sh` est attaché à cette VM :
+```bash
+qm config 100 | grep hookscript
+# hookscript: local:snippets/post-provision.sh
+```
+
+Il s'exécute à chaque `post-start` et configure automatiquement :
+- Clés SSH root (ecdsa-key-20241218 + claude-mgmt)
+- Proxy APT → `http://192.168.20.35:3142`
+- CA interne zalin.home
+- Packages de base (net-tools, vim, htop, screen)
+
+## Reconstruction de la VM
+
+Si la VM doit être reconstruite depuis zéro :
+
+### 1. Génération de l'ISO
+
+```bash
+# Sur PVE2
+scp /opt/vLLM-yoyo/configs/preseed-inference.cfg root@pve2.zalin.home:/tmp/
+ssh root@pve2.zalin.home 'bash /tmp/remaster-iso.sh /tmp/preseed-inference.cfg debian-12-inference.iso'
+```
+
+### 2. Création de la VM
 
 ```bash
 ssh root@pve2.zalin.home '
 qm create 100 \
   --name inference \
-  --memory 16384 \
+  --memory 49152 \
   --cores 8 \
-  --sockets 1 \
   --cpu host \
   --machine q35 \
   --bios ovmf \
@@ -66,204 +173,68 @@ qm create 100 \
   --numa 1 \
   --onboot 0 \
   --args "-no-reboot"
-qm start 100
 '
 ```
 
-> `--vga std` : console graphique pendant installation (retirer après).
-> `--numa 1` : requis pour GPU passthrough stable.
-> `--args "-no-reboot"` : converti le reboot guest en shutdown QEMU (retiré automatiquement par le script de monitoring).
-
-## 3. Suivi installation + nettoyage automatique
+### 3. Installation automatique
 
 ```bash
-# Sur claude-code
+# Lancer le monitor AVANT de démarrer la VM
 nohup bash /opt/vLLM-yoyo/scripts/monitor-and-fix-vm.sh 100 192.168.20.160 \
   > /var/log/vm-monitor-100.log 2>&1 &
 
+qm start 100
 tail -f /var/log/vm-monitor-100.log
 ```
 
-Le script détecte que la VM passe en `stopped` (reboot converti en shutdown par `-no-reboot`), puis :
-- Détache l'ISO : `qm set 100 --ide2 none`
-- Fixe le boot : `qm set 100 --boot order=scsi0`
-- Supprime l'arg `-no-reboot` : `qm set 100 --delete args`
-- Relance la VM : `qm start 100`
-- Attend que SSH soit disponible sur `192.168.20.160`
+Le monitor détecte le `stopped` post-install, corrige le boot order et relance la VM.
 
-## 4. Accès console
+### 4. Post-installation
 
 ```bash
-# Console graphique : Proxmox → VM 100 → Console (noVNC)
+# Attacher le hookscript
+qm set 100 --hookscript local:snippets/post-provision.sh
 
-# Console série
-ssh root@pve2.zalin.home 'qm terminal 100'
-# Quitter avec Ctrl+O
-
-# SSH direct (après installation)
-ssh root@192.168.20.160
-```
-
-## 5. Configuration post-installation
-
-```bash
-ssh root@192.168.20.160
-
-# Vérifier le GPU
-lspci | grep -i nvidia
-nvidia-smi   # doit afficher la RTX 5070
-
-# Mise à jour système
-apt update && apt upgrade -y
-
-# Paquets essentiels
-apt install -y build-essential python3-pip python3-venv pciutils nvtop net-tools
-```
-
-## 6. Installation CUDA 12.x
-
-```bash
-# Ajouter le repo NVIDIA CUDA
-wget https://developer.download.nvidia.com/compute/cuda/repos/debian12/x86_64/cuda-keyring_1.1-1_all.deb
-dpkg -i cuda-keyring_1.1-1_all.deb
-apt update
-apt install -y cuda-toolkit-12-6
-
-# Vérifier
-nvidia-smi
-nvcc --version
-```
-
-## 7. Installation vLLM
-
-```bash
+# Réinstaller vLLM
 python3 -m venv /opt/vllm-env
-source /opt/vllm-env/bin/activate
+/opt/vllm-env/bin/pip install vllm==0.20.1
 
-pip install vllm
-
-# Vérifier
-python3 -c "import vllm; print(vllm.__version__)"
-```
-
-## 8. Téléchargement du modèle
-
-```bash
-source /opt/vllm-env/bin/activate
-pip install huggingface_hub[cli]
-
-# Télécharger DeepSeek-Coder-V2-Lite-Instruct (~32 Go)
-huggingface-cli download deepseek-ai/DeepSeek-Coder-V2-Lite-Instruct \
-  --local-dir /opt/models/deepseek-coder-v2-lite
-```
-
-## 9. Lancement vLLM
-
-```bash
-source /opt/vllm-env/bin/activate
-
-vllm serve deepseek-ai/DeepSeek-Coder-V2-Lite-Instruct \
-  --model /opt/models/deepseek-coder-v2-lite \
-  --dtype bfloat16 \
-  --max-model-len 8192 \
-  --host 0.0.0.0 \
-  --port 8000 \
-  --served-model-name deepseek-coder
-```
-
-## 10. Service systemd vLLM
-
-```bash
-cat > /etc/systemd/system/vllm.service << 'EOF'
-[Unit]
-Description=vLLM Inference Server
-After=network.target
-
-[Service]
-Type=simple
-User=root
-WorkingDirectory=/opt
-ExecStart=/opt/vllm-env/bin/vllm serve deepseek-ai/DeepSeek-Coder-V2-Lite-Instruct \
-  --model /opt/models/deepseek-coder-v2-lite \
-  --dtype bfloat16 \
-  --max-model-len 8192 \
-  --host 0.0.0.0 \
-  --port 8000 \
-  --served-model-name deepseek-coder
-Restart=on-failure
-RestartSec=10
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-systemctl daemon-reload
-systemctl enable vllm
-systemctl start vllm
-```
-
-## 11. Validation
-
-```bash
-# Test API OpenAI-compatible depuis claude-code
-curl http://192.168.20.160:8000/v1/models
-
-curl http://192.168.20.160:8000/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "deepseek-coder",
-    "messages": [{"role": "user", "content": "Ecris un hello world en Python"}],
-    "max_tokens": 200
-  }'
-```
-
-## 12. Extension LVM
-
-```bash
-# Depuis PVE2 — agrandir le disque virtuel
-qm resize 100 scsi0 +50G
-
-# Dans la VM — étendre le LV voulu
-pvresize /dev/sda3
-lvextend -l +100%FREE /dev/vg-inference/lv-models
-resize2fs /dev/vg-inference/lv-models
+# Installer le service
+cp /opt/vLLM-yoyo/configs/vllm-qwen.service /etc/systemd/system/
+systemctl daemon-reload && systemctl enable --now vllm-qwen
 ```
 
 ## Troubleshooting
 
 ### GPU non détecté
 ```bash
-lspci -nnk | grep -A3 "NVIDIA"
-# → doit afficher : Kernel driver in use: nvidia (pas vfio-pci)
 nvidia-smi
+lspci -nnk | grep -A3 NVIDIA
+# Kernel driver in use: nvidia (pas vfio-pci)
 ```
 
-### OOM (Out of Memory)
+### OOM au chargement
 ```bash
-# Réduire la longueur de contexte
+# Réduire le contexte
 --max-model-len 4096
-
-# Ou activer la quantification
+# Ou augmenter la quantification
 --quantization bitsandbytes
 ```
 
-### Enlever le VGA (après installation)
+### Espace disque root (lv-root)
 ```bash
-# Depuis PVE2, après installation terminée
-qm set 100 --vga none
+df -h /
+# Si > 85% : nettoyer /root/.cache/vllm/torch_compile_cache (peut faire 2-3 Go)
+du -sh /root/.cache/vllm/
 ```
 
-### VM bloquée en reinstall (boot sur ISO au lieu du disque)
+### Extension LVM
 ```bash
-# Vérifier l'état de la VM
-ssh root@pve2.zalin.home 'qm config 100 | grep -E "^boot|^ide2|^args"'
+# Depuis PVE2
+qm resize 100 scsi0 +50G
 
-# Corriger manuellement si le script n'a pas tourné
-ssh root@pve2.zalin.home '
-  qm stop 100
-  qm set 100 --ide2 none
-  qm set 100 --boot order=scsi0
-  qm set 100 --delete args 2>/dev/null || true
-  qm start 100
-'
+# Dans la VM
+pvresize /dev/sda3
+lvextend -l +100%FREE /dev/vg-inference/lv-models
+resize2fs /dev/vg-inference/lv-models
 ```

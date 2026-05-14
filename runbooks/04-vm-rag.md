@@ -1,90 +1,60 @@
 # Runbook 04 — VM-3 : RAG (ChromaDB + LlamaIndex)
 
-> **Phase 2** — À déployer après validation de VM-1 et VM-2.
+> **Statut : 🔄 Installation en cours** — VM 102, Debian 12 preseed en cours d'installation.
 
-## Prérequis
-
-- VM apt-cache (103) opérationnelle sur `192.168.20.163:3142`
-- VM inference (100) opérationnelle
-- VM frontend (101) opérationnelle
-- Pool ZFS `G4-ZFS-POOL` disponible
-
-## Spécifications
+## Spécifications réelles déployées
 
 | Paramètre | Valeur |
 |-----------|--------|
 | VMID | 102 |
 | IP | 192.168.20.162 |
-| Disque | 220 Go (G4-ZFS-POOL) |
-| RAM | 8 Go |
+| RAM | 4 Go |
 | CPU | 4 cores (host) |
-| LVM | vg-rag : lv-root 20 Go / lv-chromadb 100 Go (`/opt/chromadb`) / lv-models 50 Go (`/opt/models`) / lv-swap 4 Go (~44,5 Go libre = 20%) |
+| Disque | 30 Go (G4-ZFS-POOL) |
+| OS | Debian 12.x (installation en cours) |
 
-## 1. Génération de l'ISO
+## Layout disque (LVM vg-rag)
 
+| LV | Taille | Point de montage |
+|----|--------|-----------------|
+| lv-root | 12 Go | `/` |
+| lv-docker | 12 Go | `/var/lib/docker` |
+| lv-swap | 2 Go | swap |
+
+> ⚠️ Disque plus petit que prévu initialement (220 Go → 30 Go).  
+> À étendre si besoin avec `qm resize 102 scsi0 +XXG` + `lvextend`.
+
+## Hookscript Proxmox
+
+Le hookscript `post-provision.sh` est attaché à cette VM :
 ```bash
-# Sur claude-code
-scp /opt/vLLM-yoyo/configs/preseed-rag.cfg root@pve2.zalin.home:/tmp/
-
-ssh root@pve2.zalin.home \
-  'bash /tmp/remaster-iso.sh /tmp/preseed-rag.cfg debian-12-rag.iso'
+qm config 102 | grep hookscript
+# hookscript: local:snippets/post-provision.sh
 ```
 
-## 2. Création de la VM
+Il configurera automatiquement au premier démarrage :
+- Clés SSH root (ecdsa-key-20241218 + claude-mgmt)
+- Proxy APT → `http://192.168.20.35:3142`
+- CA interne zalin.home
+- Packages de base
 
-L'option `--args "-no-reboot"` convertit le reboot de fin d'installation en shutdown QEMU,
-permettant au script de monitoring de corriger le boot order avant de relancer la VM.
-
-```bash
-ssh root@pve2.zalin.home '
-qm create 102 \
-  --name rag \
-  --memory 8192 \
-  --cores 4 \
-  --sockets 1 \
-  --cpu host \
-  --machine q35 \
-  --bios ovmf \
-  --efidisk0 G4-ZFS-POOL:1,efitype=4m,pre-enrolled-keys=0 \
-  --scsi0 G4-ZFS-POOL:220,iothread=1 \
-  --scsihw virtio-scsi-single \
-  --ide2 local:iso/debian-12-rag.iso,media=cdrom \
-  --boot order="ide2;scsi0" \
-  --ostype l26 \
-  --net0 virtio,bridge=OVSBridge,tag=20 \
-  --agent enabled=1 \
-  --vga std \
-  --serial0 socket \
-  --onboot 1 \
-  --args "-no-reboot"
-qm start 102
-'
-```
-
-> `--args "-no-reboot"` : converti le reboot guest en shutdown QEMU (retiré automatiquement par le script de monitoring).
-
-## 3. Suivi installation + nettoyage automatique
+## Suivi installation
 
 ```bash
-# Sur claude-code
-nohup bash /opt/vLLM-yoyo/scripts/monitor-and-fix-vm.sh 102 192.168.20.162 \
-  > /var/log/vm-monitor-102.log 2>&1 &
+# Monitor en cours sur PVE2 (log)
+ssh root@pve2.zalin.home 'cat /var/log/vm-monitor-102.log'
 
-tail -f /var/log/vm-monitor-102.log
+# Statut VM
+ssh root@pve2.zalin.home 'qm status 102'
 ```
 
-Le script détecte que la VM passe en `stopped` (reboot converti en shutdown par `-no-reboot`), puis :
-- Détache l'ISO : `qm set 102 --ide2 none`
-- Fixe le boot : `qm set 102 --boot order=scsi0`
-- Supprime l'arg `-no-reboot` : `qm set 102 --delete args`
-- Relance la VM : `qm start 102`
-- Attend que SSH soit disponible sur `192.168.20.162`
+Une fois l'installation terminée, le monitor :
+1. Détecte le `stopped` (reboot → shutdown via `-no-reboot`)
+2. Supprime l'ISO, fixe `boot=scsi0`, retire `-no-reboot`
+3. Redémarre la VM → Debian démarre
+4. Le hookscript configure SSH/proxy automatiquement
 
-## 4. Déploiement ChromaDB via Portainer
-
-Déployer le stack `configs/openwebui/stack-rag.yml` via Portainer (`https://192.168.20.91:9443`).
-
-Ou manuellement :
+## Déploiement ChromaDB (post-installation)
 
 ```bash
 ssh root@192.168.20.162
@@ -100,34 +70,29 @@ services:
     ports:
       - "8001:8000"
     volumes:
-      - /opt/chromadb:/chroma/chroma
+      - chromadb-data:/chroma/chroma
     environment:
       - IS_PERSISTENT=TRUE
       - ANONYMIZED_TELEMETRY=FALSE
 
-  rag-api:
-    image: python:3.11-slim
-    container_name: rag-api
-    restart: unless-stopped
+  portainer-agent:
+    image: portainer/agent:latest
+    container_name: portainer-agent
+    restart: always
     ports:
-      - "8080:8080"
+      - "9001:9001"
     volumes:
-      - /opt/models:/models
-      - ./rag:/app
-    working_dir: /app
-    command: python -m uvicorn main:app --host 0.0.0.0 --port 8080
-    depends_on:
-      - chromadb
-    environment:
-      - CHROMA_HOST=chromadb
-      - CHROMA_PORT=8000
-      - INFERENCE_URL=http://192.168.20.160:8000/v1
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /var/lib/docker/volumes:/var/lib/docker/volumes
+
+volumes:
+  chromadb-data:
 EOF
 
 docker compose up -d
 ```
 
-## 5. Sources d'ingestion prévues
+## Sources d'ingestion prévues
 
 - Codebase personnelle (repos Git locaux)
 - Documentation ESPHome
@@ -135,26 +100,71 @@ docker compose up -d
 - Documentation Proxmox
 - Documentation OPNsense
 
-## 6. Extension LVM
+## Extension LVM si nécessaire
 
 ```bash
-# Depuis PVE2
-qm resize 102 scsi0 +50G
+# Depuis PVE2 — agrandir le disque virtuel
+qm resize 102 scsi0 +20G
 
-# Dans la VM — étendre ChromaDB ou models
+# Dans la VM
 pvresize /dev/sda3
-lvextend -l +100%FREE /dev/vg-rag/lv-chromadb
-resize2fs /dev/vg-rag/lv-chromadb
+lvextend -l +100%FREE /dev/vg-rag/lv-docker
+resize2fs /dev/vg-rag/lv-docker
+```
+
+## Reconstruction depuis zéro
+
+### 1. Génération de l'ISO
+
+```bash
+# preseed-rag.cfg est sur PVE2 dans /tmp/
+ssh root@pve2.zalin.home 'bash /tmp/remaster-iso.sh /tmp/preseed-rag.cfg debian-12-rag.iso'
+```
+
+### 2. Création de la VM
+
+```bash
+ssh root@pve2.zalin.home '
+qm create 102 \
+  --name rag \
+  --memory 4096 \
+  --cores 4 \
+  --cpu host \
+  --machine q35 \
+  --bios ovmf \
+  --efidisk0 G4-ZFS-POOL:1,efitype=4m,pre-enrolled-keys=0 \
+  --scsi0 G4-ZFS-POOL:30 \
+  --scsihw virtio-scsi-pci \
+  --ide2 local:iso/debian-12-rag.iso,media=cdrom \
+  --boot order="ide2;scsi0" \
+  --net0 virtio,bridge=OVSBridge,tag=20 \
+  --vga std \
+  --serial0 socket \
+  --ostype l26 \
+  --agent enabled=1 \
+  --onboot 0 \
+  --args "-no-reboot"
+'
+```
+
+### 3. Installation automatique
+
+```bash
+nohup bash /opt/vLLM-yoyo/scripts/monitor-and-fix-vm.sh 102 192.168.20.162 \
+  > /var/log/vm-monitor-102.log 2>&1 &
+
+qm start 102
+qm set 102 --hookscript local:snippets/post-provision.sh
+tail -f /var/log/vm-monitor-102.log
 ```
 
 ## Troubleshooting
 
-### VM bloquée en reinstall (boot sur ISO au lieu du disque)
+### VM bloquée en reinstall
 ```bash
-# Vérifier l'état de la VM
 ssh root@pve2.zalin.home 'qm config 102 | grep -E "^boot|^ide2|^args"'
 
-# Corriger manuellement si le script n'a pas tourné
+# Correction manuelle
 ssh root@pve2.zalin.home '
   qm stop 102
   qm set 102 --ide2 none
