@@ -10,7 +10,7 @@
 
 | Paramètre | Valeur |
 |-----------|--------|
-| VMID | 101 |
+| VMID | 105 |
 | IP | 192.168.20.161 |
 | Disque | 50 Go (G4-ZFS-POOL) |
 | RAM | 4 Go |
@@ -41,7 +41,7 @@ permettant au script de monitoring de corriger le boot order avant de relancer l
 
 ```bash
 ssh root@pve2.zalin.home '
-qm create 101 \
+qm create 105 \
   --name frontend \
   --memory 4096 \
   --cores 4 \
@@ -71,7 +71,7 @@ qm start 101
 
 ```bash
 # Sur claude-code
-nohup bash /opt/vLLM-yoyo/scripts/monitor-and-fix-vm.sh 101 192.168.20.161 \
+nohup bash /opt/vLLM-yoyo/scripts/monitor-and-fix-vm.sh 105 192.168.20.161 \
   > /var/log/vm-monitor-101.log 2>&1 &
 
 tail -f /var/log/vm-monitor-101.log
