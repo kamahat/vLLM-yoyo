@@ -1,7 +1,7 @@
 #!/bin/bash
 MODEL=${1:-qwen}
 echo "Arrêt des services vLLM..."
-systemctl stop vllm-qwen vllm-unfilteredai vllm-badmistral vllm-imagegen 2>/dev/null
+systemctl stop vllm-qwen vllm-unfilteredai vllm-dan-qwen vllm-imagegen 2>/dev/null
 sleep 2
 case "$MODEL" in
   qwen)
@@ -14,8 +14,8 @@ case "$MODEL" in
     until curl -s http://localhost:8000/health >/dev/null 2>&1; do sleep 3; done
     echo "Actif: $(curl -s http://localhost:8000/v1/models | grep -o "\"id\":\"[^\"]*\"" | head -1)"
     ;;
-  badmistral)
-    systemctl start vllm-badmistral
+  dan-qwen)
+    systemctl start vllm-dan-qwen
     until curl -s http://localhost:8000/health >/dev/null 2>&1; do sleep 3; done
     echo "Actif: $(curl -s http://localhost:8000/v1/models | grep -o "\"id\":\"[^\"]*\"" | head -1)"
     ;;
@@ -25,7 +25,7 @@ case "$MODEL" in
     echo "Actif: image-gen SDXL sur :8003"
     ;;
   *)
-    echo "Usage: vllm-switch [qwen|unfilteredai|badmistral|imagegen]"
+    echo "Usage: vllm-switch [qwen|unfilteredai|dan-qwen|imagegen]"
     exit 1
     ;;
 esac

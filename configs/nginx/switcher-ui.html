@@ -25,9 +25,9 @@
     .btn.unfilteredai{background:#1c0a1a;border:1px solid #831843;color:#f9a8d4}
     .btn.unfilteredai:hover:not(:disabled){background:#500724;border-color:#be185d}
     .btn.unfilteredai.active{background:#500724;border-color:#be185d;box-shadow:0 0 0 2px #be185d33}
-    .btn.badmistral{background:#1a0f00;border:1px solid #92400e;color:#fcd34d}
-    .btn.badmistral:hover:not(:disabled){background:#292000;border-color:#d97706}
-    .btn.badmistral.active{background:#292000;border-color:#d97706;box-shadow:0 0 0 2px #d9770633}
+    .btn.dan-qwen{background:#1a0f00;border:1px solid #92400e;color:#fcd34d}
+    .btn.dan-qwen:hover:not(:disabled){background:#292000;border-color:#d97706}
+    .btn.dan-qwen.active{background:#292000;border-color:#d97706;box-shadow:0 0 0 2px #d9770633}
     .btn.imagegen{background:#0a1a0a;border:1px solid #166534;color:#86efac}
     .btn.imagegen:hover:not(:disabled){background:#0d2e0d;border-color:#16a34a}
     .btn.imagegen.active{background:#0d2e0d;border-color:#16a34a;box-shadow:0 0 0 2px #16a34a33}
@@ -77,13 +77,13 @@
       </div>
       <span class="pill" id="ind-unfilteredai" style="display:none">actif</span>
     </button>
-    <button class="btn badmistral" onclick="switchModel('badmistral')" id="btn-badmistral">
+    <button class="btn dan-qwen" onclick="switchModel('dan-qwen')" id="btn-dan-qwen">
       <span class="btn-icon">🔥</span>
       <div class="btn-info">
-        <div class="btn-title">BADMISTRAL-1.5B</div>
-        <div class="btn-sub">float16 · Mistral · ctx 4096</div>
+        <div class="btn-title">Dan-Qwen3.5-4B</div>
+        <div class="btn-sub">float16 · Qwen3.5 · ctx 8192</div>
       </div>
-      <span class="pill" id="ind-badmistral" style="display:none">actif</span>
+      <span class="pill" id="ind-dan-qwen" style="display:none">actif</span>
     </button>
 
     <div class="sep-label" style="margin-top:6px"><span>Image</span></div>
@@ -111,10 +111,10 @@ const API = 'http://brain.zalin.home:8002';
 const MODEL_MAP = {
   'qwen2.5-coder-7b':'qwen',
   'unfilteredai-1b':'unfilteredai',
-  'badmistral-1.5b':'badmistral',
+  'dan-qwen3.5-4b':'dan-qwen',
   'nsfw-gen-v2':'imagegen'
 };
-const ALL_BTNS = ['qwen','unfilteredai','badmistral','imagegen'];
+const ALL_BTNS = ['qwen','unfilteredai','dan-qwen','imagegen'];
 let polling = null;
 
 async function getStatus() {

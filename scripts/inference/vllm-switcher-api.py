@@ -5,7 +5,7 @@ import subprocess, json, urllib.parse
 MODELS = {
     'qwen': 'qwen2.5-coder-7b',
     'unfilteredai': 'unfilteredai-1b',
-    'badmistral': 'badmistral-1.5b',
+    'dan-qwen': 'dan-qwen3.5-4b',
     'imagegen': 'nsfw-gen-v2'
 }
 

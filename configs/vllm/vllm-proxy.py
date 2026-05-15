@@ -27,13 +27,13 @@ SWITCH_TIMEOUT = 300   # secondes max pour le chargement
 ALL_MODELS = [
     {"id": "qwen2.5-coder-7b", "label": "Qwen2.5-Coder-7B (AWQ)"},
     {"id": "unfilteredai-1b",  "label": "UnfilteredAI-1B"},
-    {"id": "badmistral-1.5b",  "label": "BADMISTRAL-1.5B"},
+    {"id": "dan-qwen3.5-4b",  "label": "Dan-Qwen3.5-4B"},
 ]
 
 MODEL_KEYS = {
     "qwen2.5-coder-7b": "qwen",
     "unfilteredai-1b":  "unfilteredai",
-    "badmistral-1.5b":  "badmistral",
+    "dan-qwen3.5-4b":  "dan-qwen",
 }
 
 app = FastAPI(title="vLLM Proxy")
