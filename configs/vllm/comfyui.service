@@ -1,0 +1,20 @@
+[Unit]
+Description=ComfyUI — Jib Mix Flux FP4 (nunchaku/SVDQuant)
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/vllm-env/comfyui
+ExecStart=/opt/vllm-env/comfyui-env/bin/python3 main.py \
+    --listen 0.0.0.0 \
+    --port 8188 \
+    --output-directory /opt/models/comfyui-output \
+    --cuda-device 0
+Environment=HF_HOME=/opt/models/hf-cache
+Restart=on-failure
+RestartSec=10
+TimeoutStartSec=120
+
+[Install]
+WantedBy=multi-user.target

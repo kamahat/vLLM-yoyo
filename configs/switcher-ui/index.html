@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>zalin.home — Modèle IA</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:system-ui,sans-serif;background:#0f1117;color:#e2e8f0;min-height:100vh;display:flex;align-items:center;justify-content:center}
+    .card{background:#1a1d27;border:1px solid #2d3148;border-radius:16px;padding:40px;width:480px}
+    h1{font-size:1.4rem;font-weight:600;margin-bottom:4px;color:#fff;text-align:center}
+    .subtitle{color:#64748b;font-size:.85rem;margin-bottom:28px;text-align:center}
+    .status-box{background:#0d1117;border-radius:10px;padding:16px;margin-bottom:24px;text-align:center}
+    .status-label{color:#64748b;font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px}
+    .model-name{font-weight:600;font-size:1.05rem;color:#a78bfa;margin-bottom:6px}
+    .badge{display:inline-block;padding:3px 10px;border-radius:99px;font-size:.7rem}
+    .badge.ready{background:#16a34a22;color:#4ade80;border:1px solid #16a34a44}
+    .badge.loading{background:#d9770622;color:#fb923c;border:1px solid #d9770644}
+    .models{display:flex;flex-direction:column;gap:10px;margin-bottom:20px}
+    .btn{padding:14px 18px;border-radius:10px;border:none;cursor:pointer;font-size:.9rem;font-weight:500;transition:all .15s;display:flex;align-items:center;gap:12px;width:100%}
+    .btn:disabled{opacity:.35;cursor:not-allowed}
+    .btn.qwen{background:#1e1b4b;border:1px solid #4c1d95;color:#a78bfa}
+    .btn.qwen:hover:not(:disabled){background:#2e1065;border-color:#7c3aed}
+    .btn.qwen.active{background:#2e1065;border-color:#7c3aed;box-shadow:0 0 0 2px #7c3aed33}
+    .btn.unfilteredai{background:#1c0a1a;border:1px solid #831843;color:#f9a8d4}
+    .btn.unfilteredai:hover:not(:disabled){background:#500724;border-color:#be185d}
+    .btn.unfilteredai.active{background:#500724;border-color:#be185d;box-shadow:0 0 0 2px #be185d33}
+    .btn.dan-qwen{background:#1a0f00;border:1px solid #92400e;color:#fcd34d}
+    .btn.dan-qwen:hover:not(:disabled){background:#292000;border-color:#d97706}
+    .btn.dan-qwen.active{background:#292000;border-color:#d97706;box-shadow:0 0 0 2px #d9770633}
+    .btn.imagegen{background:#0a1a0a;border:1px solid #166534;color:#86efac}
+    .btn.imagegen:hover:not(:disabled){background:#0d2e0d;border-color:#16a34a}
+    .btn.imagegen.active{background:#0d2e0d;border-color:#16a34a;box-shadow:0 0 0 2px #16a34a33}
+    .btn.comfyui{background:#051520;border:1px solid #0e4d7a;color:#7dd3fc}
+    .btn.comfyui:hover:not(:disabled){background:#0a2440;border-color:#0284c7}
+    .btn.comfyui.active{background:#0a2440;border-color:#0284c7;box-shadow:0 0 0 2px #0284c733}
+    .btn-icon{font-size:1.4rem;flex-shrink:0}
+    .btn-info{flex:1;text-align:left}
+    .btn-title{font-weight:600}
+    .btn-sub{font-size:.72rem;opacity:.6;margin-top:2px}
+    .pill{margin-left:auto;font-size:.68rem;background:#ffffff12;padding:2px 8px;border-radius:99px;flex-shrink:0}
+    .sep{border:none;border-top:1px solid #2d3148;margin:4px 0}
+    .sep-label{font-size:.68rem;color:#475569;text-align:center;margin:-8px 0 4px;position:relative}
+    .sep-label span{background:#1a1d27;padding:0 8px}
+    .msg{font-size:.8rem;color:#64748b;min-height:22px;text-align:center}
+    .spinner{display:inline-block;width:13px;height:13px;border:2px solid #ffffff25;border-top-color:#a78bfa;border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:5px}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .links{display:flex;justify-content:center;margin-top:18px;gap:20px;flex-wrap:wrap}
+    .links a{color:#6366f1;text-decoration:none;font-size:.82rem}
+    .links a:hover{text-decoration:underline}
+    .info-tag{font-size:.68rem;color:#475569;text-align:center;margin-top:6px}
+  </style>
+</head>
+<body>
+<div class="card">
+  <h1>zalin.home AI</h1>
+  <p class="subtitle">Sélection du modèle d'inférence</p>
+
+  <div class="status-box">
+    <div class="status-label">Modèle actif</div>
+    <div class="model-name" id="model-name">—</div>
+    <span class="badge loading" id="status-badge">vérification...</span>
+  </div>
+
+  <div class="models">
+    <div class="sep-label"><span>Texte</span></div>
+    <button class="btn qwen" onclick="switchModel('qwen')" id="btn-qwen">
+      <span class="btn-icon">🧑‍💻</span>
+      <div class="btn-info">
+        <div class="btn-title">Qwen2.5-Coder-7B</div>
+        <div class="btn-sub">AWQ INT4 · Coding · ctx 8192</div>
+      </div>
+      <span class="pill" id="ind-qwen" style="display:none">actif</span>
+    </button>
+    <button class="btn unfilteredai" onclick="switchModel('unfilteredai')" id="btn-unfilteredai">
+      <span class="btn-icon">🔓</span>
+      <div class="btn-info">
+        <div class="btn-title">UnfilteredAI-1B</div>
+        <div class="btn-sub">float16 · Généraliste · ctx 2048</div>
+      </div>
+      <span class="pill" id="ind-unfilteredai" style="display:none">actif</span>
+    </button>
+    <button class="btn dan-qwen" onclick="switchModel('dan-qwen')" id="btn-dan-qwen">
+      <span class="btn-icon">🔥</span>
+      <div class="btn-info">
+        <div class="btn-title">Dan-Qwen3.5-4B</div>
+        <div class="btn-sub">float16 · UnfilteredAI · ctx 4096</div>
+      </div>
+      <span class="pill" id="ind-dan-qwen" style="display:none">actif</span>
+    </button>
+
+    <div class="sep-label" style="margin-top:6px"><span>Image</span></div>
+    <button class="btn imagegen" onclick="switchModel('imagegen')" id="btn-imagegen">
+      <span class="btn-icon">🎨</span>
+      <div class="btn-info">
+        <div class="btn-title">NSFW-gen-v2</div>
+        <div class="btn-sub">SDXL · A1111 API · port 8003</div>
+      </div>
+      <span class="pill" id="ind-imagegen" style="display:none">actif</span>
+    </button>
+    <div class="info-tag" id="imagegen-hint" style="display:none">→ Open WebUI › Images › backend A1111 : http://brain.zalin.home:8003</div>
+    <button class="btn comfyui" onclick="switchModel('comfyui')" id="btn-comfyui">
+      <span class="btn-icon">✨</span>
+      <div class="btn-info">
+        <div class="btn-title">Jib Mix Flux FP4</div>
+        <div class="btn-sub">SVDQuant · nunchaku · ComfyUI :8188</div>
+      </div>
+      <span class="pill" id="ind-comfyui" style="display:none">actif</span>
+    </button>
+    <div class="info-tag" id="comfyui-hint" style="display:none">→ <a href="http://brain.zalin.home:8188" target="_blank" style="color:#7dd3fc">Ouvrir ComfyUI</a></div>
+  </div>
+
+  <p class="msg" id="msg"></p>
+  <div class="links">
+    <a href="http://ia.zalin.home:3000" target="_blank">→ Open WebUI</a>
+    <a href="http://brain.zalin.home:8000/v1/models" target="_blank">→ API text</a>
+    <a href="http://brain.zalin.home:8188" target="_blank">→ ComfyUI</a>
+  </div>
+</div>
+
+<script>
+const API = 'http://brain.zalin.home:8002';
+const MODEL_MAP = {
+  'qwen2.5-coder-7b':'qwen',
+  'unfilteredai-1b':'unfilteredai',
+  'dan-qwen3.5-4b':'dan-qwen',
+  'nsfw-gen-v2':'imagegen',
+  'jib-mix-flux-fp4':'comfyui'
+};
+const ALL_BTNS = ['qwen','unfilteredai','dan-qwen','imagegen','comfyui'];
+let polling = null;
+
+async function getStatus() {
+  try { const r = await fetch(API+'/status',{signal:AbortSignal.timeout(3000)}); return await r.json(); }
+  catch { return null; }
+}
+
+function setUI(active, ready) {
+  const key = MODEL_MAP[active];
+  document.getElementById('model-name').textContent = active || '—';
+  const badge = document.getElementById('status-badge');
+  badge.textContent = ready ? 'prêt' : 'chargement...';
+  badge.className = 'badge '+(ready?'ready':'loading');
+  ALL_BTNS.forEach(k => {
+    document.getElementById('btn-'+k).classList.toggle('active', k===key && ready);
+    document.getElementById('ind-'+k).style.display = (k===key && ready) ? '' : 'none';
+  });
+  // Show hints when image models are active
+  const imgHint = document.getElementById('imagegen-hint');
+  if(imgHint) imgHint.style.display = (key==='imagegen' && ready) ? '' : 'none';
+  const comfyHint = document.getElementById('comfyui-hint');
+  if(comfyHint) comfyHint.style.display = (key==='comfyui' && ready) ? '' : 'none';
+}
+
+async function switchModel(model) {
+  ALL_BTNS.forEach(k => document.getElementById('btn-'+k).disabled=true);
+  const isImage = (model==='imagegen' || model==='comfyui');
+  const eta = model==='imagegen' ? '~3-5 min (SDXL)' : model==='comfyui' ? '~2-4 min (Flux FP4)' : '~2-3 min';
+  document.getElementById('msg').innerHTML = '<span class="spinner"></span>Chargement du modèle ('+eta+')...';
+  try { await fetch(API+'/switch/'+model,{signal:AbortSignal.timeout(5000)}); } catch {}
+  if (polling) clearInterval(polling);
+  polling = setInterval(async () => {
+    const s = await getStatus();
+    if (s && s.ready) {
+      setUI(s.active, true);
+      document.getElementById('msg').textContent = '✓ Modèle prêt';
+      ALL_BTNS.forEach(k => document.getElementById('btn-'+k).disabled=false);
+      clearInterval(polling); polling=null;
+    } else {
+      setUI(s?.active, false);
+    }
+  }, 5000);
+}
+
+async function refresh() { if (!polling) { const s=await getStatus(); if(s) setUI(s.active,s.ready); } }
+refresh();
+setInterval(refresh, 10000);
+</script>
+</body>
+</html>
