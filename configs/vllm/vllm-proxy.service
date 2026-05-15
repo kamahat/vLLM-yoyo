@@ -1,0 +1,17 @@
+[Unit]
+Description=vLLM Model Proxy - selecteur multi-modeles pour Open WebUI
+After=network.target vllm-switcher.service
+Wants=vllm-switcher.service
+
+[Service]
+Type=simple
+User=root
+ExecStart=/opt/vllm-env/bin/python3 /usr/local/bin/vllm-proxy.py
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=vllm-proxy
+
+[Install]
+WantedBy=multi-user.target
