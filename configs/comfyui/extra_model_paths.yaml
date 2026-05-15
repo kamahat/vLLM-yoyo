@@ -1,0 +1,10 @@
+zalin_models:
+    base_path: /opt/models
+    checkpoints: .
+    vae: comfyui-vae
+    clip: comfyui-clip
+    loras: comfyui-loras
+    output: comfyui-output
+    temp: comfyui-temp
+
+# nunchaku models are loaded by their full path in the workflow nodes
