@@ -1,6 +1,6 @@
 # Runbook 02 — VM-100 : Inference (vLLM + multi-modeles)
 
-> **Statut : OK** — Switcher API actif sur http://192.168.20.160:8002
+> **Statut : OK** — Switcher API actif sur http://brain.zalin.home:8002
 > **Modele par defaut** : Qwen2.5-Coder-7B-Instruct-AWQ (AWQ_Marlin INT4)
 
 > WARNING **Blackwell (compute 12.0 / RTX 5070)** : FP8 dynamique produit des sorties incorrectes.
@@ -11,7 +11,7 @@
 | Parametre | Valeur |
 |-----------|--------|
 | VMID | 100 |
-| IP | 192.168.20.160 |
+| IP | brain.zalin.home |
 | RAM | 48 Go |
 | CPU | 8 cores (host) |
 | GPU | RTX 5070 12 Go VRAM driver 595.71.05 compute 12.0 (Blackwell) |
@@ -48,14 +48,14 @@ NSFW-gen-v2 sur port 8003 (pipeline SDXL independant).
 ## Switching des modeles
 
 ### Via frontend (recommande)
-http://192.168.20.161:8080 -> boutons Qwen / UnfilteredAI / BADMISTRAL / NSFW-gen-v2
+http://ia.zalin.home:8080 -> boutons Qwen / UnfilteredAI / BADMISTRAL / NSFW-gen-v2
 
 ### Via API
 ```
-curl http://192.168.20.160:8002/switch/qwen
-curl http://192.168.20.160:8002/switch/unfilteredai
-curl http://192.168.20.160:8002/switch/badmistral
-curl http://192.168.20.160:8002/switch/imagegen
+curl http://brain.zalin.home:8002/switch/qwen
+curl http://brain.zalin.home:8002/switch/unfilteredai
+curl http://brain.zalin.home:8002/switch/badmistral
+curl http://brain.zalin.home:8002/switch/imagegen
 ```
 
 ### Via CLI (sur la VM inference)
@@ -107,19 +107,19 @@ Compatible AUTOMATIC1111 API.
 
 ### Texte (LLM) port 8000
 ```
-GET  http://192.168.20.160:8000/health
-GET  http://192.168.20.160:8000/v1/models
-POST http://192.168.20.160:8000/v1/chat/completions
-POST http://192.168.20.160:8000/v1/completions
+GET  http://brain.zalin.home:8000/health
+GET  http://brain.zalin.home:8000/v1/models
+POST http://brain.zalin.home:8000/v1/chat/completions
+POST http://brain.zalin.home:8000/v1/completions
 ```
 
 ### Image (SDXL) port 8003
 ```
-GET  http://192.168.20.160:8003/health
-GET  http://192.168.20.160:8003/sdapi/v1/sd-models
-POST http://192.168.20.160:8003/sdapi/v1/txt2img
+GET  http://brain.zalin.home:8003/health
+GET  http://brain.zalin.home:8003/sdapi/v1/sd-models
+POST http://brain.zalin.home:8003/sdapi/v1/txt2img
 ```
-Open WebUI -> Settings -> Images -> A1111 -> http://192.168.20.160:8003
+Open WebUI -> Settings -> Images -> A1111 -> http://brain.zalin.home:8003
 (configure via AUTOMATIC1111_BASE_URL dans la stack Portainer open-webui)
 
 ### Switcher port 8002

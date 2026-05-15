@@ -3,7 +3,7 @@
 ## Prérequis
 
 - VM apt-cache (103) opérationnelle sur `192.168.20.163:3142`
-- VM inference (100) opérationnelle — API vLLM sur `192.168.20.160:8000`
+- VM inference (100) opérationnelle — API vLLM sur `brain.zalin.home:8000`
 - Pool ZFS `G4-ZFS-POOL` disponible
 
 ## Spécifications
@@ -11,7 +11,7 @@
 | Paramètre | Valeur |
 |-----------|--------|
 | VMID | 105 |
-| IP | 192.168.20.161 |
+| IP | ia.zalin.home |
 | Disque | 50 Go (G4-ZFS-POOL) |
 | RAM | 4 Go |
 | CPU | 4 cores (host) |
@@ -28,7 +28,7 @@ ssh root@pve2.zalin.home \
 ```
 
 Le preseed configure automatiquement :
-- IP statique `192.168.20.161/24`
+- IP statique `ia.zalin.home/24`
 - Proxy APT → `http://192.168.20.163:3142/`
 - LVM avec ≥15% de marge dans le VG
 - Docker CE + Portainer agent (port 9001)
@@ -71,7 +71,7 @@ qm start 101
 
 ```bash
 # Sur claude-code
-nohup bash /opt/vLLM-yoyo/scripts/monitor-and-fix-vm.sh 105 192.168.20.161 \
+nohup bash /opt/vLLM-yoyo/scripts/monitor-and-fix-vm.sh 105 ia.zalin.home \
   > /var/log/vm-monitor-101.log 2>&1 &
 
 tail -f /var/log/vm-monitor-101.log
@@ -82,7 +82,7 @@ Le script détecte que la VM passe en `stopped` (reboot converti en shutdown par
 - Fixe le boot : `qm set 101 --boot order=scsi0`
 - Supprime l'arg `-no-reboot` : `qm set 101 --delete args`
 - Relance la VM : `qm start 101`
-- Attend que SSH soit disponible sur `192.168.20.161`
+- Attend que SSH soit disponible sur `ia.zalin.home`
 
 ## 4. Déploiement Open WebUI via Portainer
 
@@ -91,7 +91,7 @@ Déployer le stack `configs/openwebui/stack-frontend.yml` via Portainer (`https:
 Ou manuellement :
 
 ```bash
-ssh root@192.168.20.161
+ssh root@ia.zalin.home
 
 mkdir -p /opt/openwebui && cd /opt/openwebui
 
@@ -106,7 +106,7 @@ services:
     volumes:
       - open-webui:/app/backend/data
     environment:
-      - OPENAI_API_BASE_URL=http://192.168.20.160:8000/v1
+      - OPENAI_API_BASE_URL=http://brain.zalin.home:8000/v1
       - OPENAI_API_KEY=not-required
       - WEBUI_AUTH=true
 
@@ -148,10 +148,10 @@ nginx -t && systemctl reload nginx
 
 ```bash
 # Depuis le réseau interne
-curl http://192.168.20.161/
+curl http://ia.zalin.home/
 
 # Ou depuis un navigateur
-# http://192.168.20.161/
+# http://ia.zalin.home/
 ```
 
 - Créer le compte admin au premier accès
