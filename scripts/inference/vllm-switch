@@ -1,0 +1,31 @@
+#!/bin/bash
+MODEL=${1:-qwen}
+echo "Arrêt des services vLLM..."
+systemctl stop vllm-qwen vllm-unfilteredai vllm-badmistral vllm-imagegen 2>/dev/null
+sleep 2
+case "$MODEL" in
+  qwen)
+    systemctl start vllm-qwen
+    until curl -s http://localhost:8000/health >/dev/null 2>&1; do sleep 3; done
+    echo "Actif: $(curl -s http://localhost:8000/v1/models | grep -o "\"id\":\"[^\"]*\"" | head -1)"
+    ;;
+  unfilteredai|1b)
+    systemctl start vllm-unfilteredai
+    until curl -s http://localhost:8000/health >/dev/null 2>&1; do sleep 3; done
+    echo "Actif: $(curl -s http://localhost:8000/v1/models | grep -o "\"id\":\"[^\"]*\"" | head -1)"
+    ;;
+  badmistral)
+    systemctl start vllm-badmistral
+    until curl -s http://localhost:8000/health >/dev/null 2>&1; do sleep 3; done
+    echo "Actif: $(curl -s http://localhost:8000/v1/models | grep -o "\"id\":\"[^\"]*\"" | head -1)"
+    ;;
+  imagegen|nsfw-gen)
+    systemctl start vllm-imagegen
+    until curl -s http://localhost:8003/health >/dev/null 2>&1; do sleep 3; done
+    echo "Actif: image-gen SDXL sur :8003"
+    ;;
+  *)
+    echo "Usage: vllm-switch [qwen|unfilteredai|badmistral|imagegen]"
+    exit 1
+    ;;
+esac

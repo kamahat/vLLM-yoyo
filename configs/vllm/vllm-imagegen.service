@@ -1,0 +1,19 @@
+[Unit]
+Description=Image Generation API - NSFW-gen-v2 SDXL
+After=network.target
+
+[Service]
+Type=simple
+User=root
+Environment="CUDA_VISIBLE_DEVICES=0"
+Environment="HF_HUB_OFFLINE=1"
+ExecStart=/opt/vllm-env/bin/python3 /usr/local/bin/image-gen-api.py
+Restart=on-failure
+RestartSec=10
+TimeoutStartSec=300
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=vllm-imagegen
+
+[Install]
+WantedBy=multi-user.target
